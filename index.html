@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ひらがな れんしゅう</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* UDデジタル教科書体を優先し、フォールバックとして丸ゴシック系を指定 */
+        body {
+            font-family: "UD Digi Kyokasho N-R", "UD デジタル 教科書体 N-R", "UD Digi Kyokasho NK-R", "Zen Maru Gothic", sans-serif;
+            background-color: #fff7ed;
+            touch-action: none;
+            user-select: none;
+        }
+
+        .canvas-container {
+            position: relative;
+            width: 320px;
+            height: 320px;
+            background-color: white;
+            border: 8px solid #ffedd5;
+            border-radius: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        /* 50音表のグリッドレイアウト */
+        .char-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 6px;
+            max-height: 280px;
+            overflow-y: auto;
+            padding: 12px;
+            background: #ffffff;
+            border-radius: 20px;
+        }
+
+        .btn-char {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            font-weight: bold;
+            background: #fff;
+            border: 2px solid #fed7aa;
+            border-radius: 12px;
+            color: #9a3412;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .btn-char.empty {
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .btn-char.active {
+            background-color: #ea580c;
+            color: white;
+            border-color: #c2410c;
+            transform: scale(1.05);
+        }
+
+        #feedback-overlay {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 10rem;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        .stroke-number {
+            position: absolute;
+            width: 28px;
+            height: 28px;
+            background: #ef4444;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 50;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: opacity 0.3s;
+        }
+
+        .hidden-guide {
+            opacity: 0 !important;
+        }
+
+        .status-badge {
+            background: #fed7aa;
+            color: #9a3412;
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 0.875rem;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        /* 練習用文字のフォント指定 */
+        #display-char {
+            font-family: "UD Digi Kyokasho N-B", "UD デジタル 教科書体 N-B", "UD Digi Kyokasho NK-B", "Zen Maru Gothic", sans-serif;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center p-4">
+
+    <header class="text-center mb-4">
+        <h1 class="text-3xl font-extrabold text-orange-700 tracking-tight">ひらがな れんしゅう</h1>
+        <p class="text-orange-500 font-bold text-sm">ただしい かきじゅんで かこう！</p>
+    </header>
+
+    <main class="w-full max-w-md flex flex-col items-center gap-4">
+        
+        <div class="flex flex-col items-center">
+            <div id="stroke-status" class="status-badge">じゅんびOK</div>
+            <div class="flex items-center gap-4 mb-3">
+                <div id="display-char" class="text-6xl font-bold text-orange-600 bg-white w-24 h-24 rounded-3xl shadow-md flex items-center justify-center border-4 border-orange-100">あ</div>
+                <div class="flex flex-col gap-2">
+                    <button id="btn-speak" class="bg-orange-500 hover:bg-orange-600 text-white p-3 rounded-2xl shadow-lg active:scale-90 transition-transform">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                    </button>
+                    <button id="btn-toggle-guide" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-xl font-bold text-xs shadow-md">
+                        ガイド: ON
+                    </button>
+                </div>
+            </div>
+
+            <div class="canvas-container" id="container">
+                <canvas id="guide-canvas" width="320" height="320"></canvas>
+                <canvas id="draw-canvas" width="320" height="320"></canvas>
+                <div id="number-layer"></div>
+                <div id="feedback-overlay">💮</div>
+            </div>
+
+            <div class="mt-4 flex gap-4">
+                <button id="btn-clear" class="bg-slate-500 hover:bg-slate-600 text-white px-8 py-3 rounded-full font-bold shadow-md">やりなおす</button>
+            </div>
+        </div>
+
+        <div class="w-full">
+            <div id="char-list" class="char-grid border-2 border-orange-100"></div>
+        </div>
+    </main>
+
+    <script>
+        const charData = {
+            "あ": { paths: [{s:{x:80,y:100}},{s:{x:160,y:50}},{s:{x:220,y:140}}] },
+            "い": { paths: [{s:{x:80,y:80}},{s:{x:240,y:80}}] },
+            "う": { paths: [{s:{x:130,y:60}},{s:{x:100,y:150}}] },
+            "え": { paths: [{s:{x:140,y:50}},{s:{x:80,y:140}}] },
+            "お": { paths: [{s:{x:80,y:110}},{s:{x:150,y:60}},{s:{x:240,y:70}}] },
+            "か": { paths: [{s:{x:80,y:130}},{s:{x:150,y:70}},{s:{x:230,y:90}}] },
+            "き": { paths: [{s:{x:100,y:100}},{s:{x:100,y:140}},{s:{x:160,y:60}},{s:{x:130,y:250}}] },
+            "く": { paths: [{s:{x:100,y:100}}] },
+            "け": { paths: [{s:{x:80,y:80}},{s:{x:140,y:100}},{s:{x:200,y:70}}] },
+            "こ": { paths: [{s:{x:100,y:110}},{s:{x:100,y:230}}] },
+            "さ": { paths: [{s:{x:100,y:100}},{s:{x:160,y:60}},{s:{x:130,y:250}}] },
+            "し": { paths: [{s:{x:120,y:60}}] },
+            "す": { paths: [{s:{x:80,y:100}},{s:{x:160,y:50}}] },
+            "せ": { paths: [{s:{x:80,y:140}},{s:{x:230,y:80}},{s:{x:130,y:80}}] },
+            "そ": { paths: [{s:{x:100,y:80}}] },
+            "た": { paths: [{s:{x:80,y:120}},{s:{x:150,y:70}},{s:{x:200,y:150}},{s:{x:200,y:230}}] },
+            "ち": { paths: [{s:{x:100,y:100}},{s:{x:160,y:50}}] },
+            "つ": { paths: [{s:{x:100,y:120}}] },
+            "て": { paths: [{s:{x:100,y:100}}] },
+            "と": { paths: [{s:{x:160,y:80}},{s:{x:230,y:130}}] },
+            "な": { paths: [{s:{x:80,y:120}},{s:{x:160,y:70}},{s:{x:230,y:80}},{s:{x:200,y:170}}] },
+            "に": { paths: [{s:{x:90,y:80}},{s:{x:180,y:130}},{s:{x:180,y:230}}] },
+            "ぬ": { paths: [{s:{x:130,y:100}},{s:{x:180,y:60}}] },
+            "ね": { paths: [{s:{x:100,y:60}},{s:{x:140,y:120}}] },
+            "の": { paths: [{s:{x:180,y:110}}] },
+            "は": { paths: [{s:{x:90,y:80}},{s:{x:140,y:110}},{s:{x:210,y:70}}] },
+            "ひ": { paths: [{s:{x:90,y:110}}] },
+            "ふ": { paths: [{s:{x:160,y:60}},{s:{x:100,y:140}},{s:{x:80,y:240}},{s:{x:230,y:230}}] },
+            "へ": { paths: [{s:{x:80,y:200}}] },
+            "ほ": { paths: [{s:{x:90,y:80}},{s:{x:140,y:100}},{s:{x:140,y:140}},{s:{x:210,y:70}}] },
+            "ま": { paths: [{s:{x:100,y:100}},{s:{x:100,y:140}},{s:{x:160,y:60}}] },
+            "み": { paths: [{s:{x:100,y:110}},{s:{x:230,y:120}}] },
+            "む": { paths: [{s:{x:80,y:110}},{s:{x:160,y:50}},{s:{x:240,y:80}}] },
+            "め": { paths: [{s:{x:130,y:100}},{s:{x:180,y:60}}] },
+            "も": { paths: [{s:{x:160,y:60}},{s:{x:110,y:140}},{s:{x:110,y:200}}] },
+            "や": { paths: [{s:{x:110,y:130}},{s:{x:210,y:80}},{s:{x:160,y:70}}] },
+            "ゆ": { paths: [{s:{x:110,y:120}},{s:{x:210,y:60}}] },
+            "よ": { paths: [{s:{x:110,y:120}},{s:{x:200,y:60}}] },
+            "ら": { paths: [{s:{x:130,y:70}},{s:{x:110,y:150}}] },
+            "り": { paths: [{s:{x:110,y:80}},{s:{x:220,y:80}}] },
+            "る": { paths: [{s:{x:100,y:100}}] },
+            "れ": { paths: [{s:{x:100,y:60}},{s:{x:130,y:130}}] },
+            "ろ": { paths: [{s:{x:100,y:100}}] },
+            "わ": { paths: [{s:{x:100,y:60}},{s:{x:130,y:130}}] },
+            "を": { paths: [{s:{x:100,y:120}},{s:{x:160,y:80}},{s:{x:240,y:150}}] },
+            "ん": { paths: [{s:{x:100,y:100}}] }
+        };
+
+        const gojuon = [
+            ["あ", "い", "う", "え", "お"],
+            ["か", "き", "く", "け", "こ"],
+            ["さ", "し", "す", "せ", "そ"],
+            ["た", "ち", "つ", "て", "と"],
+            ["な", "に", "ぬ", "ね", "の"],
+            ["は", "ひ", "ふ", "へ", "ほ"],
+            ["ま", "み", "む", "め", "も"],
+            ["や", "", "ゆ", "", "よ"],
+            ["ら", "り", "る", "れ", "ろ"],
+            ["わ", "", "を", "", "ん"]
+        ];
+
+        let currentChar = "あ";
+        let userStrokes = [];
+        let isDrawing = false;
+        let speechEnabled = false;
+        let showGuide = true;
+
+        const drawCanvas = document.getElementById('draw-canvas');
+        const guideCanvas = document.getElementById('guide-canvas');
+        const dctx = drawCanvas.getContext('2d');
+        const gctx = guideCanvas.getContext('2d');
+        const feedbackOverlay = document.getElementById('feedback-overlay');
+        const numberLayer = document.getElementById('number-layer');
+        const btnToggleGuide = document.getElementById('btn-toggle-guide');
+        const strokeStatus = document.getElementById('stroke-status');
+
+        // 効果音再生用のオーディオコンテキスト
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        /**
+         * 音を鳴らす汎用関数
+         * @param {number} freq 周波数(Hz)
+         * @param {number} startTime 開始時間
+         * @param {number} duration 継続時間
+         * @param {string} type 波形タイプ
+         * @param {number} volume ボリューム
+         */
+        function playSound(freq, startTime, duration, type = 'sine', volume = 0.2) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, startTime);
+            
+            gain.gain.setValueAtTime(volume, startTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            osc.start(startTime);
+            osc.stop(startTime + duration);
+        }
+
+        // ピンポン（チャイム音）
+        function playCorrectSound() {
+            initAudio();
+            const now = audioCtx.currentTime;
+            // ピン（高い音）
+            playSound(660, now, 0.4, 'triangle', 0.3); 
+            // ポン（少し低い音、少し遅れて開始）
+            playSound(523, now + 0.3, 0.6, 'triangle', 0.3); 
+        }
+
+        // ブー（長めの低い音）
+        function playWrongSound() {
+            initAudio();
+            const now = audioCtx.currentTime;
+            // 濁った低い音を作るために2つの周波数を重ねる
+            playSound(110, now, 1.0, 'sawtooth', 0.2); 
+            playSound(115, now, 1.0, 'sawtooth', 0.2); 
+        }
+
+        function init() {
+            renderCharList();
+            setupCanvas();
+            loadChar(currentChar);
+
+            document.getElementById('btn-speak').addEventListener('click', () => {
+                speechEnabled = true;
+                initAudio();
+                speak(`${currentChar}。`, 0.6);
+            });
+            document.getElementById('btn-clear').addEventListener('click', clearDrawing);
+            
+            btnToggleGuide.addEventListener('click', () => {
+                showGuide = !showGuide;
+                btnToggleGuide.innerText = `ガイド: ${showGuide ? 'ON' : 'OFF'}`;
+                btnToggleGuide.classList.toggle('bg-blue-500', showGuide);
+                btnToggleGuide.classList.toggle('bg-slate-400', !showGuide);
+                refreshGuideDisplay();
+            });
+            
+            document.body.addEventListener('click', () => { 
+                speechEnabled = true; 
+                initAudio();
+            }, {once: true});
+        }
+
+        function renderCharList() {
+            const list = document.getElementById('char-list');
+            list.innerHTML = '';
+            gojuon.forEach(row => {
+                row.forEach(char => {
+                    const btn = document.createElement('button');
+                    if (char === "") {
+                        btn.className = "btn-char empty";
+                    } else {
+                        btn.className = `btn-char ${char === currentChar ? 'active' : ''}`;
+                        btn.innerText = char;
+                        btn.onclick = () => selectChar(char);
+                    }
+                    list.appendChild(btn);
+                });
+            });
+        }
+
+        function selectChar(c) {
+            currentChar = c;
+            document.getElementById('display-char').innerText = c;
+            document.querySelectorAll('.btn-char').forEach(b => {
+                if(b.innerText === c) b.classList.add('active');
+                else b.classList.remove('active');
+            });
+            loadChar(c);
+            speak(`${c}。`, 0.6);
+        }
+
+        function loadChar(c) {
+            clearDrawing();
+            drawGuide(c);
+            renderStrokeNumbers(c);
+            refreshGuideDisplay();
+            updateStatus();
+        }
+
+        function drawGuide(c) {
+            gctx.clearRect(0, 0, 320, 320);
+            gctx.strokeStyle = "#fff7ed";
+            gctx.setLineDash([5, 5]);
+            gctx.lineWidth = 2;
+            gctx.beginPath();
+            gctx.moveTo(160, 0); gctx.lineTo(160, 320);
+            gctx.moveTo(0, 160); gctx.lineTo(320, 160);
+            gctx.stroke();
+            gctx.setLineDash([]);
+
+            gctx.font = "bold 240px 'UD Digi Kyokasho N-B', 'UD デジタル 教科書体 N-B', sans-serif";
+            gctx.textAlign = "center";
+            gctx.textBaseline = "middle";
+            gctx.fillStyle = "#f1f5f9";
+            gctx.fillText(c, 160, 170);
+        }
+
+        function renderStrokeNumbers(c) {
+            numberLayer.innerHTML = '';
+            const data = charData[c];
+            if (!data) return;
+
+            data.paths.forEach((p, i) => {
+                const num = document.createElement('div');
+                num.className = 'stroke-number';
+                num.innerText = i + 1;
+                num.style.left = (p.s.x - 14) + 'px';
+                num.style.top = (p.s.y - 14) + 'px';
+                numberLayer.appendChild(num);
+            });
+        }
+
+        function refreshGuideDisplay() {
+            guideCanvas.style.opacity = showGuide ? "1" : "0";
+            numberLayer.querySelectorAll('.stroke-number').forEach(el => {
+                el.classList.toggle('hidden-guide', !showGuide);
+            });
+        }
+
+        function updateStatus() {
+            const data = charData[currentChar];
+            const total = data ? data.paths.length : 1;
+            const remaining = total - userStrokes.length;
+            if (remaining > 0) {
+                strokeStatus.innerText = `あと ${remaining}かく`;
+                strokeStatus.className = "status-badge";
+            } else {
+                strokeStatus.innerText = `はんてい中...`;
+                strokeStatus.className = "status-badge bg-orange-200";
+            }
+        }
+
+        function setupCanvas() {
+            const getPos = (e) => {
+                const rect = drawCanvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return { x: clientX - rect.left, y: clientY - rect.top };
+            };
+
+            const start = (e) => {
+                if (feedbackOverlay.style.display === 'block') return;
+                initAudio();
+                const pos = getPos(e);
+                isDrawing = true;
+                userStrokes.push({ start: pos });
+                dctx.beginPath();
+                dctx.moveTo(pos.x, pos.y);
+                dctx.strokeStyle = "#1e293b";
+                dctx.lineWidth = 16;
+                dctx.lineCap = "round";
+                dctx.lineJoin = "round";
+            };
+
+            const move = (e) => {
+                if (!isDrawing) return;
+                const pos = getPos(e);
+                dctx.lineTo(pos.x, pos.y);
+                dctx.stroke();
+            };
+
+            const end = () => {
+                if (!isDrawing) return;
+                isDrawing = false;
+                updateStatus();
+                checkCompletion();
+            };
+
+            drawCanvas.addEventListener('mousedown', start);
+            drawCanvas.addEventListener('mousemove', move);
+            window.addEventListener('mouseup', end);
+            drawCanvas.addEventListener('touchstart', (e) => { e.preventDefault(); start(e); });
+            drawCanvas.addEventListener('touchmove', (e) => { e.preventDefault(); move(e); });
+            drawCanvas.addEventListener('touchend', (e) => { e.preventDefault(); end(); });
+        }
+
+        function checkCompletion() {
+            const data = charData[currentChar];
+            if (!data) return;
+            const total = data.paths.length;
+
+            if (userStrokes.length >= total) {
+                let isCorrect = true;
+                for (let i = 0; i < total; i++) {
+                    const target = data.paths[i].s;
+                    const userStart = userStrokes[i].start;
+                    const dist = Math.hypot(userStart.x - target.x, userStart.y - target.y);
+                    if (dist > 90) {
+                        isCorrect = false;
+                        break;
+                    }
+                }
+                if (isCorrect) showSuccess();
+                else showWrong();
+            }
+        }
+
+        function showSuccess() {
+            feedbackOverlay.innerText = "💮";
+            feedbackOverlay.style.color = "#ef4444";
+            feedbackOverlay.style.display = 'block';
+            playCorrectSound();
+            setTimeout(() => {
+                feedbackOverlay.style.display = 'none';
+                clearDrawing();
+            }, 3000);
+        }
+
+        function showWrong() {
+            feedbackOverlay.innerText = "×";
+            feedbackOverlay.style.color = "#64748b";
+            feedbackOverlay.style.display = 'block';
+            playWrongSound();
+            setTimeout(() => {
+                feedbackOverlay.style.display = 'none';
+                clearDrawing();
+            }, 3000);
+        }
+
+        function clearDrawing() {
+            dctx.clearRect(0, 0, 320, 320);
+            userStrokes = [];
+            isDrawing = false;
+            updateStatus();
+        }
+
+        function speak(text, rate = 0.6) {
+            if (!speechEnabled) return;
+            window.speechSynthesis.cancel();
+            const uttr = new SpeechSynthesisUtterance(text);
+            uttr.lang = "ja-JP";
+            uttr.rate = rate; 
+            uttr.pitch = 1.1;
+            window.speechSynthesis.speak(uttr);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
